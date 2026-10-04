@@ -1,0 +1,23 @@
+# Borrowed Badge -- runtime dependencies
+#
+# Deliberately small. The fuzzy-matching layer uses the standard library
+# (difflib) and only upgrades to rapidfuzz if you choose to install it.
+
+fastapi>=0.115,<1.0
+uvicorn[standard]>=0.30,<1.0
+pydantic>=2.7,<3.0
+
+# Reads SEBI's "Download" spreadsheets. The legacy .xls (BIFF) format needs
+# xlrd; openpyxl cannot read it. Optional in the sense that the app runs
+# without it, but the importer needs it for .xls files.
+xlrd>=2.0
+openpyxl>=3.1        # only for .xlsx variants of the same downloads
+
+# --- optional ---------------------------------------------------------------
+# Better entity/payee name matching than difflib, especially on abbreviated
+# names. The code detects it at import time and falls back cleanly if absent.
+rapidfuzz>=3.0
+
+# --- development / testing --------------------------------------------------
+pytest>=8.0
+httpx>=0.27            # required by fastapi.testclient

@@ -1,0 +1,23 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+
+# Local database (only created if BB_PERSIST_INPUTS is enabled)
+*.db
+*.sqlite
+borrowed_badge.db
+
+# Evaluation output
+report.json
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Test caches
+.pytest_cache/

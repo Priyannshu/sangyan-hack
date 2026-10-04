@@ -1,0 +1,545 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Borrowed Badge — pre-payment verifier</title>
+<style>
+  :root {
+    --bg: #f5f6f8; --surface: #fff; --border: #dfe3e8; --text: #1c2430;
+    --muted: #5b6675; --accent: #1f4ed8;
+    --connected-fg: #0d6b3a;   --connected-bg: #e6f5ec;   --connected-bd: #a9d9bd;
+    --notconnected-fg: #8a5200; --notconnected-bg: #fdf2e0; --notconnected-bd: #f0cf9a;
+    --mismatch-fg: #a11414;    --mismatch-bg: #fdecec;    --mismatch-bd: #f2b4b4;
+    --cannotverify-fg: #44506a; --cannotverify-bg: #eef1f6; --cannotverify-bd: #c3cbd9;
+    --sebi-fg: #1f4ed8; --sebi-bg: #eef2ff; --sebi-bd: #c3d0f7;
+    --radius: 10px;
+    --shadow: 0 1px 2px rgba(20,30,50,.06), 0 4px 14px rgba(20,30,50,.06);
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+    font: 15px/1.55 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  .wrap { max-width: 1120px; margin: 0 auto; padding: 28px 20px 72px; }
+  header.page h1 { margin: 0 0 6px; font-size: 26px; letter-spacing: -.02em; }
+  header.page p { margin: 0; color: var(--muted); max-width: 76ch; }
+  .principle { margin-top: 14px; padding: 12px 14px; background: var(--surface);
+    border: 1px solid var(--border); border-left: 4px solid var(--accent);
+    border-radius: var(--radius); font-size: 14px; color: var(--muted); }
+  .principle b { color: var(--text); }
+
+  .layout { display: grid; grid-template-columns: minmax(340px, 430px) 1fr;
+    gap: 22px; align-items: start; margin-top: 22px; }
+  @media (max-width: 920px) { .layout { grid-template-columns: 1fr; } }
+
+  .card { background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); box-shadow: var(--shadow); }
+  .card .pad { padding: 18px; }
+  .card h2 { margin: 0; font-size: 15px; padding: 14px 18px; border-bottom: 1px solid var(--border); }
+  .card h2 .step { display: inline-block; width: 20px; height: 20px; line-height: 20px;
+    text-align: center; border-radius: 50%; background: var(--accent); color: #fff;
+    font-size: 12px; margin-right: 8px; }
+  fieldset { border: 0; margin: 0 0 16px; padding: 0; }
+  legend { font-weight: 600; font-size: 13px; margin-bottom: 8px; color: var(--muted);
+    text-transform: uppercase; letter-spacing: .04em; }
+  label { display: block; font-size: 13px; font-weight: 600; margin: 0 0 4px; }
+  .hint { font-weight: 400; color: var(--muted); font-size: 12px; }
+  input, textarea { width: 100%; padding: 9px 11px; font: inherit; font-size: 14px;
+    border: 1px solid var(--border); border-radius: 7px; background: #fff; color: var(--text); }
+  input:focus-visible, textarea:focus-visible, button:focus-visible, summary:focus-visible {
+    outline: 2px solid var(--accent); outline-offset: 2px; }
+  textarea { min-height: 88px; resize: vertical; }
+  .row { margin-bottom: 12px; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  button { font: inherit; font-weight: 600; cursor: pointer; border-radius: 7px;
+    border: 1px solid transparent; padding: 10px 16px; }
+  .primary { background: var(--accent); color: #fff; width: 100%; }
+  .primary[disabled] { opacity: .6; cursor: progress; }
+  .small { font-size: 13px; font-weight: 600; padding: 7px 12px; }
+  .outline { background: var(--surface); border-color: var(--border); color: var(--text); }
+  .outline:hover { border-color: var(--accent); color: var(--accent); }
+
+  /* SEBI hand-off box */
+  .sebi-box { background: var(--sebi-bg); border: 1px solid var(--sebi-bd);
+    border-radius: 8px; padding: 13px 14px; margin-bottom: 16px; }
+  .sebi-box .t { font-weight: 700; color: var(--sebi-fg); font-size: 14px; margin-bottom: 5px; }
+  .sebi-box p { margin: 0 0 10px; font-size: 13px; color: var(--text); }
+  .sebi-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .sebi-actions a { text-decoration: none; }
+  .copy-note { font-size: 12px; color: var(--muted); }
+
+  /* verdict */
+  .verdict-head { padding: 20px 18px; border-radius: var(--radius) var(--radius) 0 0; }
+  .verdict-head .top { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .verdict-head .status { font-size: 21px; font-weight: 700; letter-spacing: -.01em; }
+  .verdict-head .headline { margin: 10px 0 0; font-size: 14px; }
+  .confidence { margin-left: auto; font-size: 12px; font-weight: 700; padding: 4px 10px;
+    border-radius: 999px; border: 1px solid currentColor; white-space: nowrap; }
+  .v-CONNECTED { color: var(--connected-fg); background: var(--connected-bg); border-color: var(--connected-bd); }
+  .v-NOT_CONNECTED { color: var(--notconnected-fg); background: var(--notconnected-bg); border-color: var(--notconnected-bd); }
+  .v-MISMATCH { color: var(--mismatch-fg); background: var(--mismatch-bg); border-color: var(--mismatch-bd); }
+  .v-CANNOT_VERIFY { color: var(--cannotverify-fg); background: var(--cannotverify-bg); border-color: var(--cannotverify-bd); }
+  .chip { display: inline-block; font-size: 12px; font-weight: 700; padding: 3px 9px;
+    border-radius: 999px; border: 1px solid currentColor; }
+
+  .riskbar { display: flex; align-items: center; gap: 10px; padding: 12px 18px;
+    border-top: 1px solid var(--border); font-size: 14px; }
+  .riskbar .dot { width: 10px; height: 10px; border-radius: 50%; flex: none; }
+  .risk-none .dot { background: #97a3b4; } .risk-low .dot { background: #d0a22a; }
+  .risk-medium .dot { background: #d97b28; } .risk-high .dot { background: #c62828; }
+  .risk-high { background: var(--mismatch-bg); }
+
+  .empty { padding: 34px 18px; color: var(--muted); text-align: center; }
+  .empty strong { display: block; color: var(--text); margin-bottom: 4px; font-size: 15px; }
+  section.block { padding: 16px 18px; border-top: 1px solid var(--border); }
+  section.block h3 { margin: 0 0 10px; font-size: 13px; text-transform: uppercase;
+    letter-spacing: .04em; color: var(--muted); }
+  ul.plain { margin: 0; padding-left: 18px; } ul.plain li { margin-bottom: 6px; }
+
+  .channel { border: 1px solid var(--border); border-radius: 8px; margin-bottom: 10px; overflow: hidden; }
+  .channel > .head { display: flex; align-items: center; gap: 9px; padding: 10px 12px;
+    background: #fafbfc; border-bottom: 1px solid var(--border); flex-wrap: wrap; }
+  .channel > .head .name { font-weight: 600; text-transform: capitalize; }
+  .channel > .body { padding: 11px 12px; }
+
+  details { border-top: 1px solid var(--border); }
+  details summary { cursor: pointer; padding: 10px 12px; font-size: 13px; font-weight: 600;
+    color: var(--muted); list-style: none; }
+  details summary::-webkit-details-marker { display: none; }
+  details summary::before { content: "▸ "; } details[open] summary::before { content: "▾ "; }
+  details .inner { padding: 0 12px 14px; }
+  table.evidence { width: 100%; border-collapse: collapse; font-size: 13px; }
+  table.evidence th, table.evidence td { text-align: left; padding: 7px 9px;
+    border-bottom: 1px solid var(--border); vertical-align: top; }
+  table.evidence th { color: var(--muted); font-size: 12px; text-transform: uppercase; }
+  table.evidence tr.missing td { color: var(--muted); font-style: italic; }
+  .src { font-family: ui-monospace, Consolas, monospace; font-size: 11px; color: var(--muted); white-space: nowrap; }
+
+  .flags { display: flex; flex-direction: column; gap: 8px; }
+  .flag { border: 1px solid var(--border); border-left-width: 4px; border-radius: 7px; padding: 9px 11px; }
+  .flag.high { border-left-color: var(--mismatch-fg); background: var(--mismatch-bg); }
+  .flag.medium { border-left-color: var(--notconnected-fg); background: var(--notconnected-bg); }
+  .flag.low { border-left-color: var(--cannotverify-fg); background: var(--cannotverify-bg); }
+  .flag .t { font-weight: 600; font-size: 13px; }
+  .flag .e { font-size: 13px; color: var(--muted); margin-top: 2px; }
+  .flag q { font-style: italic; }
+
+  .nextstep { padding: 13px 15px; border-radius: 8px; border: 1px dashed var(--border);
+    background: #fafbfc; font-size: 14px; }
+  .nextstep a { color: var(--accent); font-weight: 600; }
+  .meta-line { font-size: 12px; color: var(--muted); margin-top: 10px; }
+  .rules { font-family: ui-monospace, Consolas, monospace; font-size: 12px; color: var(--muted); word-break: break-word; }
+  .error { padding: 14px 16px; border-radius: var(--radius); background: var(--mismatch-bg);
+    border: 1px solid var(--mismatch-bd); color: var(--mismatch-fg); }
+  .spinner { display: inline-block; width: 13px; height: 13px; margin-right: 7px; vertical-align: -1px;
+    border: 2px solid rgba(255,255,255,.4); border-top-color: #fff; border-radius: 50%;
+    animation: spin .7s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @media (prefers-reduced-motion: reduce) { .spinner { animation: none; } }
+  footer.page { margin-top: 26px; font-size: 12px; color: var(--muted); max-width: 80ch; }
+  footer.page a { color: var(--accent); }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="page">
+    <h1>Borrowed Badge</h1>
+    <p>
+      Check whether a website, UPI/bank detail or phone number is actually
+      attached to the entity that holds the SEBI registration someone showed you.
+    </p>
+    <div class="principle">
+      <b>A badge can be real without the person wearing it being its owner.</b>
+      Most checks ask “is this registration number valid?”. This one asks “is
+      this channel connected to the entity that holds it?” — a real registration
+      number is exactly what an impersonator borrows.
+      <br><br>
+      This tool holds <b>no SEBI data</b>. SEBI's portal blocks automated
+      lookups, so you confirm the registration on SEBI's own site, read off the
+      official details, and paste them back below. Domain facts are looked up
+      live from the public domain registry (RDAP).
+    </div>
+  </header>
+
+  <div class="layout">
+
+    <form class="card" id="form" novalidate>
+
+      <h2><span class="step">1</span>What you were given</h2>
+      <div class="pad">
+        <fieldset>
+          <legend>The identity you were shown</legend>
+          <div class="row">
+            <label for="registration_number">SEBI registration number</label>
+            <input id="registration_number" name="registration_number"
+                   placeholder="e.g. INZ000031633" autocomplete="off" />
+          </div>
+          <div class="row">
+            <label for="entity_name">Firm name you were shown</label>
+            <input id="entity_name" name="entity_name"
+                   placeholder="e.g. Example Securities Pvt Ltd" autocomplete="off" />
+          </div>
+        </fieldset>
+
+        <fieldset>
+          <legend>Website</legend>
+          <div class="row">
+            <label for="website">Site or domain you were sent to</label>
+            <input id="website" name="website" placeholder="https://example-firm.in" autocomplete="off" />
+          </div>
+        </fieldset>
+
+        <fieldset>
+          <legend>Payment details</legend>
+          <div class="row">
+            <label for="upi_id">UPI ID</label>
+            <input id="upi_id" name="upi_id" placeholder="name@bank" autocomplete="off" />
+          </div>
+          <div class="grid2 row">
+            <div>
+              <label for="bank_account">Bank account</label>
+              <input id="bank_account" name="bank_account" placeholder="Account number" autocomplete="off" />
+            </div>
+            <div>
+              <label for="ifsc">IFSC</label>
+              <input id="ifsc" name="ifsc" placeholder="ABCD0123456" autocomplete="off" />
+            </div>
+          </div>
+          <div class="row">
+            <label for="payee_name">Payee name <span class="hint">— as shown in your banking app</span></label>
+            <input id="payee_name" name="payee_name" placeholder="Name on the account" autocomplete="off" />
+          </div>
+        </fieldset>
+
+        <fieldset>
+          <legend>Contact</legend>
+          <div class="row">
+            <label for="phone">Phone number that contacted you</label>
+            <input id="phone" name="phone" placeholder="+91 98765 43210" autocomplete="off" />
+          </div>
+          <div class="row">
+            <label for="message_text">Paste the message <span class="hint">— optional</span></label>
+            <textarea id="message_text" name="message_text"
+                      placeholder="Paste the WhatsApp / SMS / Telegram message here."></textarea>
+            <p class="hint" style="margin:6px 0 0">
+              Scanned in memory for pressure language. Not stored, not logged.
+            </p>
+          </div>
+        </fieldset>
+      </div>
+
+      <h2><span class="step">2</span>From SEBI's listing <span class="hint" style="text-transform:none;letter-spacing:0">— optional; only needed for a website or UPI</span></h2>
+      <div class="pad">
+        <div class="sebi-box">
+          <div class="t">The registration itself is checked automatically</div>
+          <p>
+            The registration number above is looked up against SEBI's published
+            listings, which gives the registered name, status, contact and
+            address. Those files carry <b>no website and no UPI handle</b> — so
+            if you want a website or payment channel compared, open SEBI Check,
+            find the official details it shows, and put them here.
+          </p>
+          <div class="sebi-actions">
+            <a id="sebiLink" class="outline small" role="button"
+               href="https://siportal.sebi.gov.in/intermediary/sebi-check"
+               target="_blank" rel="noopener noreferrer">Open SEBI Check ↗</a>
+            <button type="button" class="outline small" id="copyReg">Copy registration number</button>
+            <span class="copy-note" id="copyNote"></span>
+          </div>
+        </div>
+
+        <fieldset>
+          <legend>Official details per SEBI</legend>
+          <div class="grid2 row">
+            <div>
+              <label for="sebi_entity_name">Registered name</label>
+              <input id="sebi_entity_name" name="sebi_entity_name" autocomplete="off" />
+            </div>
+            <div>
+              <label for="sebi_status">Status</label>
+              <select id="sebi_status" name="sebi_status">
+                <option value="">(not stated)</option>
+                <option value="active">active</option>
+                <option value="suspended">suspended</option>
+                <option value="expired">expired</option>
+              </select>
+            </div>
+          </div>
+          <div class="row">
+            <label for="sebi_website">Official website</label>
+            <input id="sebi_website" name="sebi_website" autocomplete="off" />
+          </div>
+          <div class="row">
+            <label for="sebi_upi">Official UPI handle</label>
+            <input id="sebi_upi" name="sebi_upi" autocomplete="off" />
+          </div>
+          <div class="grid2 row">
+            <div>
+              <label for="sebi_phone">Official phone</label>
+              <input id="sebi_phone" name="sebi_phone" autocomplete="off" />
+            </div>
+            <div>
+              <label for="sebi_payee_name">Official payee name</label>
+              <input id="sebi_payee_name" name="sebi_payee_name" autocomplete="off" />
+            </div>
+          </div>
+        </fieldset>
+
+        <button class="primary" type="submit" id="submitBtn">Check these details</button>
+        <p class="meta-line">
+          Nothing you enter is saved. Leave the SEBI fields blank and you will
+          still get a risk assessment — just not a confirmation.
+        </p>
+      </div>
+    </form>
+
+    <div id="result" aria-live="polite">
+      <div class="card">
+        <div class="empty">
+          <strong>No check run yet</strong>
+          Fill in what you were given and select “Check these details”. Every
+          verdict comes with the evidence behind it.
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <footer class="page">
+    <p>
+      <b>Not affiliated with SEBI.</b> This tool holds no regulator data. Domain
+      registration facts come live from RDAP; entity details come from what you
+      read on SEBI's own listing. Use
+      <a href="https://siportal.sebi.gov.in/intermediary/sebi-check" target="_blank" rel="noopener noreferrer">SEBI Check</a>
+      for authoritative confirmation before acting on any detail. A verdict of
+      “Connected” means a verified link was found — it is not a recommendation,
+      and it says nothing about any investment.
+    </p>
+  </footer>
+</div>
+
+<script>
+"use strict";
+
+const VERDICT_ICON = { CONNECTED: "✓", NOT_CONNECTED: "✕", MISMATCH: "⚠", CANNOT_VERIFY: "?" };
+const VERDICT_TEXT = {
+  CONNECTED: "Connected", NOT_CONNECTED: "Not connected",
+  MISMATCH: "Mismatch — likely impersonation", CANNOT_VERIFY: "Can't verify"
+};
+const RISK_TEXT = {
+  none: "No specific warning sign found",
+  low: "Low risk indicators",
+  medium: "Medium risk indicators",
+  high: "High risk indicators"
+};
+
+function esc(value) {
+  return String(value ?? "").replace(/[&<>"']/g, ch => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+  }[ch]));
+}
+
+const form = document.getElementById("form");
+const resultEl = document.getElementById("result");
+const submitBtn = document.getElementById("submitBtn");
+
+function collectPayload() {
+  const payload = {};
+  for (const [key, value] of new FormData(form).entries()) {
+    const trimmed = (value || "").trim();
+    if (trimmed) payload[key] = trimmed;
+  }
+  return payload;
+}
+
+/* ------------------------------ SEBI hand-off --------------------------- */
+document.getElementById("copyReg").addEventListener("click", async () => {
+  const value = document.getElementById("registration_number").value.trim();
+  const note = document.getElementById("copyNote");
+  if (!value) { note.textContent = "Enter a registration number first."; return; }
+  try {
+    await navigator.clipboard.writeText(value);
+    note.textContent = "Copied — paste it into SEBI Check.";
+  } catch {
+    note.textContent = "Copy failed; select the number and copy manually.";
+  }
+  setTimeout(() => { note.textContent = ""; }, 4000);
+});
+
+/* -------------------------------- submit -------------------------------- */
+form.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const payload = collectPayload();
+
+  if (!Object.keys(payload).length) {
+    showError("Enter at least one detail — a website, a payment detail, a phone number, or the registration number.");
+    return;
+  }
+
+  submitBtn.disabled = true;
+  const original = submitBtn.textContent;
+  submitBtn.innerHTML = '<span class="spinner"></span>Checking…';
+
+  // Clear the previous result immediately, so a second run never appears to
+  // do nothing while the first verdict is still on screen.
+  resultEl.innerHTML = '<div class="card"><div class="empty"><strong>Checking…</strong>' +
+    'Looking up domain registration data and comparing the details.</div></div>';
+
+  try {
+    const response = await fetch("/verify", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    });
+    if (!response.ok) {
+      const detail = await response.json().catch(() => ({}));
+      throw new Error(typeof detail.detail === "string" ? detail.detail
+        : "The check could not be completed. Please review the fields and try again.");
+    }
+    render(await response.json());
+  } catch (error) {
+    showError(error.message || "Something went wrong running the check.");
+  } finally {
+    submitBtn.disabled = false;
+    submitBtn.textContent = original;
+  }
+});
+
+function showError(message) {
+  resultEl.innerHTML = '<div class="card"><div class="pad"><div class="error">' +
+    esc(message) + "</div></div></div>";
+}
+
+/* ------------------------------- rendering ------------------------------ */
+function render(v) {
+  const anchored = !!v.reference_supplied;
+  const statusText = anchored ? (VERDICT_TEXT[v.overall_verdict] || v.overall_verdict)
+    : "Registration not confirmed";
+  const statusIcon = anchored ? (VERDICT_ICON[v.overall_verdict] || "•") : "?";
+  const parts = [];
+
+  parts.push('<div class="card" style="margin-bottom:16px">');
+  parts.push(`<div class="verdict-head v-${esc(v.overall_verdict)}">
+      <div class="top">
+        <span class="icon" aria-hidden="true">${statusIcon}</span>
+        <span class="status">${esc(statusText)}</span>
+        ${anchored ? `<span class="confidence">Confidence: ${esc(v.confidence)}</span>` : ""}
+      </div>
+      <p class="headline">${esc(v.headline)}</p>
+    </div>`);
+
+  parts.push(`<div class="riskbar risk-${esc(v.risk_level)}">
+      <span class="dot" aria-hidden="true"></span>
+      <span>${esc(RISK_TEXT[v.risk_level] || v.risk_level)}</span>
+      ${v.risk_flags && v.risk_flags.length
+        ? `<span class="hint" style="margin-left:auto">${esc(v.risk_flags.join(", "))}</span>` : ""}
+    </div>`);
+
+  if (!anchored) {
+    parts.push(`<section class="block">
+      <div class="sebi-box" style="margin:0">
+        <div class="t">This is a risk assessment, not a confirmation</div>
+        <p style="margin:0">
+          No authoritative record was found for this registration, so no channel
+          could be compared against one. Look the registration up on SEBI Check
+          and add the official details on the left to get a real verdict.
+        </p>
+      </div>
+    </section>`);
+  }
+
+  if (v.reasons && v.reasons.length) {
+    parts.push('<section class="block"><h3>Why</h3><ul class="plain">' +
+      v.reasons.map(r => `<li>${esc(r)}</li>`).join("") + "</ul></section>");
+  }
+
+  if (v.entity) {
+    const e = v.entity;
+    const missing = Object.entries(e.channel_data_available || {})
+      .filter(([, ok]) => !ok).map(([k]) => k);
+    // Say where the record actually came from. Claiming "as you supplied it"
+    // when the details were resolved from the imported SEBI listing would be
+    // wrong in the one place the user is looking to judge provenance.
+    const sourceLabel = e.source === "sebi-listing-file"
+      ? "Entity from the imported SEBI listing"
+      : (e.source === "sebi-listing"
+          ? "Entity per SEBI's listing (as you supplied it)"
+          : "Entity");
+    parts.push(`<section class="block">
+      <h3>${esc(sourceLabel)}</h3>
+      <p style="margin:0 0 6px"><b>${esc(e.name || "—")}</b> — ${esc(e.registration_number || "no number given")}</p>
+      <p style="margin:0;font-size:13px;color:var(--muted)">
+        status <b>${esc(e.status)}</b>${e.entity_type && e.entity_type !== "unknown" ? ` · ${esc(e.entity_type.replace(/_/g, " "))}` : ""}
+        ${(e.official_phone_numbers || []).length ? ` · phone on record ${esc(e.official_phone_numbers.join(", "))}` : ""}
+      </p>
+      ${missing.length ? `<p class="meta-line">
+        No <b>${esc(missing.join(" or "))}</b> is on record for this entity, so
+        those channels can only be reported as unverified.
+      </p>` : ""}
+    </section>`);
+  }
+
+  if (v.channels && v.channels.length) {
+    parts.push('<section class="block"><h3>Channel by channel</h3>');
+    for (const channel of v.channels) parts.push(renderChannel(channel));
+    parts.push("</section>");
+  }
+
+  const behaviour = v.behaviour || {};
+  if (behaviour.scanned && behaviour.flags && behaviour.flags.length) {
+    parts.push(`<section class="block"><h3>Message red flags — reported separately</h3>
+      <p class="hint" style="margin:0 0 10px">${esc(behaviour.note)}</p><div class="flags">`);
+    for (const flag of behaviour.flags) {
+      const quotes = (flag.matched_text || []).map(m => `<q>${esc(m)}</q>`).join(", ");
+      parts.push(`<div class="flag ${esc(flag.severity)}">
+          <div class="t">${esc(flag.label)} <span class="hint">(${esc(flag.severity)})</span></div>
+          <div class="e">${esc(flag.explanation)}</div>
+          ${quotes ? `<div class="e">Matched: ${quotes}</div>` : ""}
+        </div>`);
+    }
+    parts.push("</div></section>");
+  }
+
+  parts.push(`<section class="block"><h3>What to do next</h3><div class="nextstep">
+      <ul class="plain" style="margin:0">
+        ${(v.recommended_next_steps || []).map((step, i) => {
+          const last = i === v.recommended_next_steps.length - 1;
+          return `<li>${esc(step)}${last && v.sebi_check_url
+            ? ` <a href="${esc(v.sebi_check_url)}" target="_blank" rel="noopener noreferrer">Open SEBI Check →</a>` : ""}</li>`;
+        }).join("")}
+      </ul></div>`);
+  if (v.rules_fired && v.rules_fired.length) {
+    parts.push(`<p class="meta-line">Rules fired: <span class="rules">${esc(v.rules_fired.join(", "))}</span></p>`);
+  }
+  parts.push("</section></div>");
+
+  resultEl.innerHTML = parts.join("");
+}
+
+function renderChannel(channel) {
+  const html = [`<div class="channel">
+    <div class="head">
+      <span class="chip v-${esc(channel.verdict)}">${VERDICT_ICON[channel.verdict] || "•"} ${esc(VERDICT_TEXT[channel.verdict] || channel.verdict)}</span>
+      <span class="name">${esc(channel.channel)}</span>
+      <span class="hint">confidence: ${esc(channel.confidence)}</span>
+    </div>
+    <div class="body"><ul class="plain" style="margin:0">` +
+      (channel.reasons || []).map(r => `<li>${esc(r)}</li>`).join("") + `</ul></div>`];
+
+  if (channel.evidence && channel.evidence.length) {
+    html.push(`<details><summary>Evidence (${channel.evidence.length})</summary><div class="inner">
+      <table class="evidence"><thead><tr><th>Check</th><th>What was found</th><th>Source</th></tr></thead>
+      <tbody>` + channel.evidence.map(item => `<tr class="${item.missing ? "missing" : ""}">
+          <td>${esc(item.check)}</td><td>${esc(item.found)}</td><td class="src">${esc(item.source)}</td>
+        </tr>`).join("") + `</tbody></table></div></details>`);
+  }
+  if (channel.flags && channel.flags.length) {
+    html.push(`<details><summary>Flags</summary><div class="inner">
+      <p class="hint" style="margin:0">${esc(channel.flags.join(", "))}</p></div></details>`);
+  }
+  html.push("</div>");
+  return html.join("");
+}
+</script>
+</body>
+</html>
