@@ -101,6 +101,8 @@ RISK_BY_FLAG: dict[str, str] = {
     "DOMAIN_NO_REGISTRATION_RECORD": "medium",
     "PAYEE_NAME_DIFFERS_FROM_REGISTER": "medium",
     "INVALID_IFSC_FORMAT": "low",
+    "UPI_SYNTAX_INVALID": "medium",
+    "UPI_PSP_UNRECOGNISED": "low",
 }
 
 RISK_RANK = {"none": 0, "low": 1, "medium": 2, "high": 3}

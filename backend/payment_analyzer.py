@@ -49,6 +49,36 @@ VALID_HANDLE_SUFFIX = "@valid"
 
 IFSC_PATTERN = re.compile(r"^[A-Z]{4}0[A-Z0-9]{6}$")
 
+#: A UPI address is 'localpart@psp'.  The local part allows letters, digits,
+#: dot, hyphen and underscore.
+UPI_PATTERN = re.compile(r"^[a-z0-9][a-z0-9._-]{1,60}@[a-z][a-z0-9]{1,30}$")
+
+#: UPI PSP handles in use in India.  A handle ending in something outside this
+#: set is not a valid UPI address.  The list goes stale as PSPs launch, so an
+#: unknown suffix is raised as a *low* flag rather than a verdict -- a
+#: legitimate new PSP must not be able to produce an accusation.
+UPI_PSP_HANDLES = {
+    # NPCI verified merchant handles
+    "valid",
+    # PhonePe
+    "ybl", "ibl", "axl",
+    # Google Pay
+    "okaxis", "okhdfcbank", "okicici", "oksbi",
+    # Paytm
+    "paytm", "ptyes", "ptaxis", "ptsbi", "pthdfc",
+    # Amazon Pay / others
+    "apl", "yapl", "abfspay", "freecharge", "jio", "jiopay",
+    "airtel", "airtelpaymentsbank", "pingpay", "rapl", "timecosmos",
+    # Bank-issued handles
+    "axisb", "barodampay", "cnrb", "idfcbank", "indus", "kotak", "kmbl",
+    "kbl", "mahb", "pnb", "punb", "rbl", "sbi", "sibl", "unionbankofindia",
+    "utbi", "vijb", "yesbankltd", "federal", "fbl", "dbs", "equitas",
+    "fino", "idbi", "nyes", "tjsb", "waaxis", "waicici", "wasbi",
+    "naviaxis", "slice", "cred", "hdfcbank", "icici", "indianbank",
+    "centralbank", "cboi", "uco", "united", "karb", "hsbc", "sc",
+    "upi", "bob", "boi", "cbin", "idbibank", "jkb", "kvb", "lvbank",
+}
+
 
 @dataclass
 class PaymentInputs:
@@ -74,6 +104,22 @@ def normalize_account(value: str) -> str:
 
 def _upi_local_part(upi: str) -> str:
     return upi.split("@", 1)[0] if "@" in upi else upi
+
+
+def check_upi_shape(upi: str) -> tuple[bool, str | None, bool]:
+    """Validate a UPI address's *syntax*, not its ownership.
+
+    Returns `(well_formed, psp_handle, psp_is_recognised)`.  This catches a
+    handle that is not a UPI address at all ('kavithamenon') or names a payment
+    provider that does not exist ('kavitha@notabank').  It says nothing about
+    who owns the handle -- SEBI publishes no UPI mapping, so that cannot be
+    checked from here.
+    """
+    upi = normalize_upi(upi)
+    if not UPI_PATTERN.match(upi):
+        return False, None, False
+    psp = upi.rsplit("@", 1)[1]
+    return True, psp, psp in UPI_PSP_HANDLES
 
 
 def analyze_payment(
@@ -127,6 +173,42 @@ def analyze_payment(
                      "entity, because no matching entity was found."],
             evidence=evidence, rules=rules, flags=flags,
         )
+
+    # ---- signal 0: is this even a UPI address? --------------------------- #
+    if upi:
+        well_formed, psp, psp_known = check_upi_shape(upi)
+        if not well_formed:
+            rules.append("UPI_SYNTAX_INVALID")
+            flags.append("UPI_SYNTAX_INVALID")
+            evidence.append(Evidence(
+                PAYMENT, "UPI address format",
+                f"'{upi}' is not a valid UPI address. A UPI ID is a name, an "
+                "'@', then a payment provider handle -- e.g. name@okhdfcbank.",
+                "heuristic",
+            ))
+            reasons.append(
+                f"'{upi}' is not shaped like a UPI address at all, so no "
+                "payment can reach it as written."
+            )
+        elif not psp_known:
+            rules.append("UPI_PSP_UNRECOGNISED")
+            flags.append("UPI_PSP_UNRECOGNISED")
+            evidence.append(Evidence(
+                PAYMENT, "UPI payment provider",
+                f"'{psp}' is not a payment provider handle we recognise",
+                "heuristic",
+            ))
+            reasons.append(
+                f"The UPI ID ends in '@{psp}', which is not a payment provider "
+                "we recognise. New providers do launch, so treat this as worth "
+                "double-checking rather than conclusive."
+            )
+        else:
+            evidence.append(Evidence(
+                PAYMENT, "UPI address format",
+                f"{upi} is well-formed, using the recognised provider '@{psp}'",
+                "heuristic",
+            ))
 
     # ---- signal 1: does the register itself list this identifier? --------- #
     registered_upis = {normalize_upi(u) for u in entity.known_valid_upi_handles}
