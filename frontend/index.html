@@ -102,6 +102,13 @@
   .channel > .body { padding: 11px 12px; }
 
   details { border-top: 1px solid var(--border); }
+  /* A collapsible block that is not an evidence panel: give it a box rather
+     than a divider, so it reads as an optional group of fields. */
+  details.fallback {
+    border: 1px solid var(--border); border-radius: 8px;
+    background: #fafbfc; margin-bottom: 16px;
+  }
+  details.fallback > summary { font-size: 13px; }
   details summary { cursor: pointer; padding: 10px 12px; font-size: 13px; font-weight: 600;
     color: var(--muted); list-style: none; }
   details summary::-webkit-details-marker { display: none; }
@@ -231,13 +238,14 @@
       <h2><span class="step">2</span>From SEBI's listing <span class="hint" style="text-transform:none;letter-spacing:0">— optional; only needed for a website or UPI</span></h2>
       <div class="pad">
         <div class="sebi-box">
-          <div class="t">The registration itself is checked automatically</div>
+          <div class="t">The registration is checked automatically</div>
           <p>
             The registration number above is looked up against SEBI's published
-            listings, which gives the registered name, status, contact and
-            address. Those files carry <b>no website and no UPI handle</b> — so
-            if you want a website or payment channel compared, open SEBI Check,
-            find the official details it shows, and put them here.
+            listing files, which gives the registered name, status, contact and
+            address — so you don't need to type those.
+            Those files carry <b>no website, no UPI handle and no payee name</b>.
+            If you want a website or payment channel compared, open SEBI Check,
+            find the official details it shows, and put them below.
           </p>
           <div class="sebi-actions">
             <a id="sebiLink" class="outline small" role="button"
@@ -249,22 +257,7 @@
         </div>
 
         <fieldset>
-          <legend>Official details per SEBI</legend>
-          <div class="grid2 row">
-            <div>
-              <label for="sebi_entity_name">Registered name</label>
-              <input id="sebi_entity_name" name="sebi_entity_name" autocomplete="off" />
-            </div>
-            <div>
-              <label for="sebi_status">Status</label>
-              <select id="sebi_status" name="sebi_status">
-                <option value="">(not stated)</option>
-                <option value="active">active</option>
-                <option value="suspended">suspended</option>
-                <option value="expired">expired</option>
-              </select>
-            </div>
-          </div>
+          <legend>Not in SEBI's files — these unlock a real website check</legend>
           <div class="row">
             <label for="sebi_website">Official website</label>
             <input id="sebi_website" name="sebi_website" autocomplete="off" />
@@ -273,17 +266,42 @@
             <label for="sebi_upi">Official UPI handle</label>
             <input id="sebi_upi" name="sebi_upi" autocomplete="off" />
           </div>
-          <div class="grid2 row">
-            <div>
+          <div class="row">
+            <label for="sebi_payee_name">Official payee name</label>
+            <input id="sebi_payee_name" name="sebi_payee_name" autocomplete="off" />
+          </div>
+        </fieldset>
+
+        <details class="fallback">
+          <summary>Only if the registration isn't in our listing</summary>
+          <div class="inner">
+            <p class="hint" style="margin:0 0 10px">
+              The listing file covers most entities. Fill these in only when a
+              lookup comes back as not found — for example a registration newer
+              than our most recent import. SEBI's file still wins where it has a
+              value; any disagreement is reported rather than hidden.
+            </p>
+            <div class="grid2 row">
+              <div>
+                <label for="sebi_entity_name">Registered name</label>
+                <input id="sebi_entity_name" name="sebi_entity_name" autocomplete="off" />
+              </div>
+              <div>
+                <label for="sebi_status">Status</label>
+                <select id="sebi_status" name="sebi_status">
+                  <option value="">(not stated)</option>
+                  <option value="active">active</option>
+                  <option value="suspended">suspended</option>
+                  <option value="expired">expired</option>
+                </select>
+              </div>
+            </div>
+            <div class="row">
               <label for="sebi_phone">Official phone</label>
               <input id="sebi_phone" name="sebi_phone" autocomplete="off" />
             </div>
-            <div>
-              <label for="sebi_payee_name">Official payee name</label>
-              <input id="sebi_payee_name" name="sebi_payee_name" autocomplete="off" />
-            </div>
           </div>
-        </fieldset>
+        </details>
 
         <button class="primary" type="submit" id="submitBtn">Check these details</button>
         <p class="meta-line">

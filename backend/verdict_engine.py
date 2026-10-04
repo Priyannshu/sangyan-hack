@@ -279,8 +279,9 @@ class VerdictEngine:
     def verify(self, payload: VerificationInput) -> Verdict:
         anchor = payload.build_anchor()
         registry_record, registry_note, registry_rule = self._registry_lookup(payload, anchor)
+        registry_conflicts: list[str] = []
         if registry_record:
-            anchor = self._merge_registry(anchor, registry_record)
+            anchor, registry_conflicts = self._merge_registry(anchor, registry_record)
         anchored = self._is_anchored(anchor)
 
         channels = self._run_channels(anchor if anchored else None, payload)
@@ -321,6 +322,13 @@ class VerdictEngine:
             evidence.append(registry_note)
             if registry_rule:
                 rules.append(registry_rule)
+
+        # Anything the user typed that disagrees with the listing file.  Shown
+        # rather than silently resolved, because a disagreement here is itself
+        # worth the user's attention.
+        if registry_conflicts:
+            rules.append("USER_INPUT_DIFFERS_FROM_LISTING")
+            reasons.extend(registry_conflicts)
 
         if anchored and not anchor.is_active and anchor.status != "unknown":
             rules.append("ENTITY_NOT_ACTIVE")
@@ -522,51 +530,74 @@ class VerdictEngine:
         ), ""
 
     @staticmethod
-    def _merge_registry(anchor: Entity, record: dict) -> Entity:
-        """Fold the registry record into the anchor.
+    def _merge_registry(anchor: Entity, record: dict) -> tuple[Entity, list[str]]:
+        """Fold the registry record into the anchor.  Returns (entity, conflicts).
 
-        Where the user supplied a value from SEBI's listing, theirs wins --
-        they read it off the live page, which is fresher than any saved file.
-        The registry fills the gaps and supplies what the listing page omits.
+        The registry is **authoritative** for the factual fields it holds: it is
+        machine-read from SEBI's own file, not typed by hand.  A typed value
+        must not be able to override it, because doing so can silence a real
+        finding -- a user who puts 'active' over a suspended record would turn
+        a MISMATCH into "no warning sign found".  That is the borrowed-badge
+        case being waved through by a mistyped form.
+
+        Where the two disagree the registry's value is kept and the conflict is
+        reported, so the disagreement is visible instead of resolved silently.
+
+        Only the fields the registry cannot supply -- website, UPI handle,
+        payee name -- are taken from the user.
         """
-        def _pick(user_value: str | None, registry_value: str | None) -> str:
-            return (user_value or "").strip() or (registry_value or "").strip()
+        conflicts: list[str] = []
 
-        # Only adopt the registry's phone if the user gave none, so a user who
-        # read a different number off the live page is not silently overridden.
+        registry_name = (record.get("name") or "").strip()
+        registry_status = (record.get("status") or "").strip()
+
+        if anchor.name and registry_name:
+            score = similarity(strip_company_noise(anchor.name),
+                               strip_company_noise(registry_name))
+            if score < default_settings.name_conflict_threshold:
+                conflicts.append(
+                    f"The name you entered from SEBI's listing ('{anchor.name}') "
+                    f"does not match the registered name on record "
+                    f"('{registry_name}'). The record has been used."
+                )
+
+        if (anchor.status not in ("", "unknown")
+                and registry_status
+                and anchor.status.lower() != registry_status.lower()):
+            conflicts.append(
+                f"You recorded the status as '{anchor.status}', but SEBI's "
+                f"listing file says '{registry_status}'. The listing file has "
+                "been used -- re-download it if you believe it is out of date."
+            )
+
         phones = tuple(anchor.official_phone_numbers)
         registry_phone = (record.get("telephone") or "").strip()
-        if not phones and registry_phone:
+        # The registry's number is preferred; a user-typed one is a fallback.
+        if registry_phone:
+            if phones and phones[0] != registry_phone:
+                conflicts.append(
+                    f"You recorded the phone as {phones[0]}, but SEBI's listing "
+                    f"file says {registry_phone}."
+                )
             phones = (registry_phone,)
 
-        # Attribute the record honestly.  `provided` is true whenever a
-        # registration number is present, which is not the same as the user
-        # having supplied listing details -- so test the detail fields directly.
-        user_supplied_details = bool(
-            anchor.name
-            or anchor.official_domains
-            or anchor.known_valid_upi_handles
-            or anchor.official_phone_numbers
-            or anchor.official_bank_payee_name
-            or anchor.status not in ("", "unknown")
-        )
-
         return Entity(
-            name=_pick(anchor.name, record.get("name")),
+            name=registry_name or anchor.name,
             registration_number=record.get("registration_number") or anchor.registration_number,
             entity_type=(
-                anchor.entity_type if anchor.entity_type != "unknown"
-                else (record.get("entity_type") or "unknown")
+                record.get("entity_type")
+                if record.get("entity_type") not in (None, "", "unknown")
+                else anchor.entity_type
             ),
-            status=anchor.status if anchor.status != "unknown" else (record.get("status") or "unknown"),
-            registered_address=_pick(anchor.registered_address, record.get("address")),
+            status=registry_status or anchor.status,
+            registered_address=(record.get("address") or "").strip() or anchor.registered_address,
             official_domains=anchor.official_domains,
             official_phone_numbers=phones,
             known_valid_upi_handles=anchor.known_valid_upi_handles,
             official_bank_payee_name=anchor.official_bank_payee_name,
             official_bank_accounts=anchor.official_bank_accounts,
-            source="sebi-listing" if user_supplied_details else "sebi-listing-file",
-        )
+            source="sebi-listing-file",
+        ), conflicts
 
     def _run_channels(
         self, anchor: Entity | None, payload: VerificationInput
