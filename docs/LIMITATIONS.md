@@ -80,6 +80,47 @@ similarity analysis helps, because there is nothing to be similar to.
 
 ---
 
+## 2b. UPI ownership — why this stays manual
+
+SEBI *does* publish a UPI verification tool, at
+`https://www.sebi.gov.in/upi-verification.html`. That page loads without
+error, and its JavaScript is readable. It is still not something this tool can
+call, for a reason worth writing down.
+
+The page talks to `https://siportal.sebi.gov.in/intermediary/sebi-check` — the
+same host that returns *"Unauthorized Request Blocked"* for automated POSTs —
+and the check is **captcha-gated by design**:
+
+```
+POST /validate  (ctype=upi-check, upi=…)   → 432  Captcha required
+GET  /captcha-data                          → captcha image + audio
+POST /validate  (… + solved captcha)        → the answer
+                                              419 expired · 433 incorrect
+```
+
+The captcha has exactly one job: establish that a human is asking. Getting past
+it means OCR-ing the image, transcribing the audio, or paying a captcha-solving
+service — all of which are circumvention, and all of which fail anyway, since
+every request returns `432` without a solved captcha.
+
+So the app does the honest version: a **"Verify on SEBI ↗"** button beside the
+UPI field copies the handle and opens SEBI's page. A person solves the captcha
+in a few seconds and gets SEBI's own answer. Free, legitimate, and it works
+today.
+
+The other route to automated UPI ownership is a commercial VPA lookup —
+Razorpay (`registered_name` plus a `name_match_score`), Eko (~₹1.44/lookup) or
+Juspay — all of which query the NPCI network and require a KYC'd account. See
+`backend/upi_verifier.py`, which is the integration point and is off unless
+credentials are supplied.
+
+Watch for one trap if you go that route: some methods are a **penny drop** — an
+actual ₹1 transfer to the handle being checked. For fraud verification that is
+backwards: you would be paying the suspected fraudster. Ask for a *penniless*
+name-resolve.
+
+---
+
 ## 3. Cat-and-mouse evasion
 
 Every rule here is public, which means every rule here is evadable by anyone

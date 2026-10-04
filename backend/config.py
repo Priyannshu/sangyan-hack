@@ -89,6 +89,23 @@ class Settings:
         default_factory=lambda: _env_float("BB_NAME_CONFLICT_THRESHOLD", 0.55)
     )
 
+    # ---- UPI ownership verification (optional, off by default) ----------- #
+    # Resolving who a UPI handle actually belongs to needs a commercial VPA
+    # lookup -- SEBI publishes no UPI mapping.  Nothing is called unless a
+    # provider is named AND its credentials are present.
+    upi_verifier: str = field(
+        default_factory=lambda: os.environ.get("BB_UPI_VERIFIER", "")
+    )
+    razorpay_base_url: str = field(
+        default_factory=lambda: os.environ.get("BB_RAZORPAY_BASE_URL", "https://api.razorpay.com")
+    )
+    razorpay_key_id: str = field(
+        default_factory=lambda: os.environ.get("BB_RAZORPAY_KEY_ID", "")
+    )
+    razorpay_key_secret: str = field(
+        default_factory=lambda: os.environ.get("BB_RAZORPAY_KEY_SECRET", "")
+    )
+
     # ---- privacy -------------------------------------------------------- #
     # Spec section 5: no persistence of user inputs.  This flag is documented
     # so the choice is visible rather than accidental.

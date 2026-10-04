@@ -200,7 +200,18 @@
           <legend>Payment details</legend>
           <div class="row">
             <label for="upi_id">UPI ID</label>
-            <input id="upi_id" name="upi_id" placeholder="name@bank" autocomplete="off" />
+            <div class="searchrow">
+              <input id="upi_id" name="upi_id" placeholder="name@bank" autocomplete="off" />
+              <button type="button" class="outline small" id="sebiUpiBtn"
+                      title="Copy this UPI ID and open SEBI's own UPI verification page">
+                Verify on SEBI ↗
+              </button>
+            </div>
+            <p class="hint" style="margin:6px 0 0" id="upiHint">
+              SEBI publishes a UPI verification tool. It asks you to solve a
+              captcha, which is exactly why we can't run it for you — open it,
+              paste, and you'll have SEBI's own answer.
+            </p>
           </div>
           <div class="grid2 row">
             <div>
@@ -382,6 +393,25 @@ document.getElementById("copyReg").addEventListener("click", async () => {
     note.textContent = "Copy failed; select the number and copy manually.";
   }
   setTimeout(() => { note.textContent = ""; }, 4000);
+});
+
+const SEBI_UPI_URL = "https://www.sebi.gov.in/upi-verification.html";
+
+document.getElementById("sebiUpiBtn").addEventListener("click", async () => {
+  const value = document.getElementById("upi_id").value.trim();
+  const hint = document.getElementById("upiHint");
+  if (value) {
+    try {
+      await navigator.clipboard.writeText(value);
+      hint.innerHTML = "Copied <b>" + esc(value) + "</b> — paste it into SEBI's " +
+        "page and solve the captcha there.";
+    } catch {
+      hint.innerHTML = "Couldn't copy automatically — select the UPI ID and copy " +
+        "it manually, then paste it into SEBI's page.";
+    }
+  }
+  // Always open the page, even with nothing copied, so the operator can find it.
+  window.open(SEBI_UPI_URL, "_blank", "noopener,noreferrer");
 });
 
 /* -------------------------------- submit -------------------------------- */
